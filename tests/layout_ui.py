@@ -1,4 +1,4 @@
-"""Mirror fills its space, opens load, and click sounds are fixed per control. Headless Chrome at 2x (Retina),
+"""Mirror fills its space, matches the pane's real terminal size (tput), opens load, and click sounds are fixed per control. Headless Chrome at 2x (Retina),
 on its OWN scratch tab; uses whatever settings.json says (e.g. a minimum text size).
 
     .venv/bin/python tests/layout_ui.py
@@ -36,7 +36,12 @@ async def main():
     ok = lambda name, cond, info="": (print(f"  {'ok ' if cond else 'BAD'} {name} {info}"), cond or bad.append(name))
     try:
         await asyncio.sleep(1.5)
-        await server.herdr("pane.send_text", {"pane_id": pane, "text": "seq 1 30\r"})
+        await server.herdr("pane.send_text", {"pane_id": pane, "text": "clear; echo TTY $(tput cols)x$(tput lines); seq 1 30\r"})
+        await asyncio.sleep(0.6)
+        import re as _re
+        real = _re.search(r"TTY (\d+)x(\d+)", (await server.herdr("pane.read", {"pane_id": pane, "source": "visible"}))["read"]["text"])
+        real = f"{real[1]}x{real[2]}" if real else None
+        print(f"  real terminal size (tput): {real}")
         for W, H in ((1512, 945), (1728, 1117)):
             async with chrome(width=W, height=H, extra_flags=["--autoplay-policy=no-user-gesture-required"]) as p:
                 await p.cmd("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=2, mobile=False)
@@ -45,6 +50,7 @@ async def main():
                 g = await p.eval(GAP)
                 fills = g and g["rows"] >= 30 and (g["scrollsSideways"] or g["right"] <= 12) and g["bottom"] <= 12
                 ok(f"{W}x{H} open from board: loads and fills", fills, g)
+                ok(f"{W}x{H} mirror size = real terminal size", g and g["size"] == real, f"(mirror {g and g['size']}, tty {real})")
                 await clickel(p, "#btn-unselect"); await p.idle(0.4)
                 await clickel(p, f'.panel[data-tab="{tab}"]'); await p.idle(1.0)
                 g = await p.eval(GAP); ok(f"{W}x{H} reopen same idle pane loads", g and g["rows"] >= 30, g)

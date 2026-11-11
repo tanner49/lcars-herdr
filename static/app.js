@@ -151,7 +151,7 @@
     $("detail").hidden = !t;
     send({ type: "watch", pane_id: t ? t.pane_id : null });
     if (t) {
-      ensureTerm(t.rect?.width || 120, t.rect?.height || 40);
+      ensureTerm(t.size?.cols || t.rect?.width || 120, t.size?.rows || t.rect?.height || 40); // frames correct it
       term.reset(); resetCur(); state.scrollOff = 0; state.mouseMode = null;
       // ?1047 toggle: xterm draws no cursor until "initialized" (focus or alt-screen), and reset clears it.
       // ?2004h: herdr frames don't carry the app's modes, so turn bracketed paste on locally; otherwise a

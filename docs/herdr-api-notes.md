@@ -17,6 +17,11 @@ Tested against herdr 0.9.3 (protocol 22) on macOS. The installed binary is the a
   - Agents carry `name`, `agent` (kind), `agent_status` (`idle`, `working`, `blocked`, `done` or `unknown`), title and cwd.
   - Layouts carry each pane's rect in cells.
 - **Per object:** there are also `workspace|tab|pane|agent .list` and `.get` calls.
+- **Pane size:** don't trust the layout rect. After the herdr window was resized, `layouts[].rect` and `pane.layout` reported 120×40 while the panes' terminals were really 160×47. No call reports a pane's columns. What worked:
+  - **rows:** `scroll.viewport_rows`, which is accurate;
+  - **columns:** the widest rendered line, or the rect's width when its height agrees with `viewport_rows`.
+
+  Sizing a mirror too narrow wraps lines and shifts every row, so mouse reports land rows off.
 - **Pane scrollback:** `pane.get` includes `scroll: {offset_from_bottom, max_offset_from_bottom, viewport_rows}`. Agents that run full-screen (in the terminal's alternate screen), such as Claude Code, report `max_offset_from_bottom: 0`, meaning herdr keeps no scrollback for them.
 
 ## Reading output

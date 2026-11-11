@@ -98,6 +98,35 @@ class HerdrError(RuntimeError):
     pass
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]")
+
+
+def display_width(line: str) -> int:
+    """Terminal cells a rendered line occupies (wide CJK/emoji count 2: overestimating is the safe side)."""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 0 if unicodedata.combining(c) else 1
+               for c in _ANSI.sub("", line))
+
+
+def pane_size(snapshot: dict, pane_id: str, text: str | None = None) -> tuple[int | None, int | None]:
+    """The pane's real terminal size. herdr's layout rect can be stale (it read 120x40 while the PTYs were
+    160x47), so rows come from the pane's viewport_rows, and cols from the widest rendered line, or the layout
+    width when the layout's height agrees with viewport_rows."""
+    pane = next((p for p in snapshot.get("panes", []) if p["pane_id"] == pane_id), {})
+    rows = (pane.get("scroll") or {}).get("viewport_rows")
+    rect = next((p["rect"] for lay in snapshot.get("layouts", []) for p in lay.get("panes", [])
+                 if p["pane_id"] == pane_id), None)
+    cols = rect["width"] if rect and rows and rect.get("height") == rows else None
+    if text is not None:
+        lines = text.split("\r\n")
+        widest = max((display_width(ln) for ln in lines), default=0)
+        cols = max(cols or 0, widest) or None
+        rows = max(rows or 0, len(lines)) or None
+    if rows is None and rect:
+        rows = rect.get("height")
+    return cols, rows
+
+
 class LineSocket:
     """Unix-socket line reader on loop.sock_* calls.
 
@@ -280,6 +309,7 @@ class Hub:
                 "pane_id": pid,
                 "pane_count": t.get("pane_count", len(panes)),
                 "rect": rects.get(pid),
+                "size": dict(zip(("cols", "rows"), pane_size(s, pid))) if pid else None,
                 "cwd": (main or {}).get("foreground_cwd") or (main or {}).get("cwd"),
                 "focused": bool(t.get("focused")),
                 "preview": self.previews.get(pid or "", []),
@@ -435,14 +465,15 @@ class Hub:
                         text = r["read"]["text"]
                     if (pid, text) != last:
                         last = (pid, text)
-                        rect = None
-                        for lay in self.snapshot.get("layouts", []):
-                            for p in lay.get("panes", []):
-                                if p["pane_id"] == pid:
-                                    rect = p["rect"]
+                        cols, rows = pane_size(self.snapshot, pid, text)
+                        size = st.get("size")
+                        if not size or size[0] != pid or size[2] != rows:  # new pane or resized: start over
+                            size = (pid, cols, rows)
+                        else:  # never shrink cols within a pane's size: too narrow wraps lines and breaks the mouse
+                            size = (pid, max(size[1] or 0, cols or 0) or None, rows)
+                        st["size"] = size
                         await ws.send_str(json.dumps({"type": "frame", "pane_id": pid, "text": text,
-                                                      "cols": (rect or {}).get("width"),
-                                                      "rows": (rect or {}).get("height"),
+                                                      "cols": size[1], "rows": size[2],
                                                       "seq": st.get("input_seq", 0)}))
                 except Exception as e:  # noqa: BLE001
                     if last != (pid, "__err__"):
