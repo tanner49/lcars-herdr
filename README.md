@@ -57,7 +57,7 @@ The first `lcars up` creates `.venv` (aiohttp, pywhispercpp, numpy) and runs `np
 | RENAME pill, or double-click a workspace | Rename the herdr workspace |
 | VIEW IN HERDR | Switch the herdr TUI to this tab |
 | CLOSE TAB | Close a plain shell tab, after a confirmation. Agent tabs are left to herdr |
-| SETTINGS | Text size (always fills the space; − / + set a minimum), board list beside or hidden, talk key, mute, volume, agent alerts, click sounds |
+| SETTINGS | Text size (AUTO fits the pane's width, up to 16 px; − / + set a fixed size), board list beside or hidden, talk key, mute, volume, agent alerts, click sounds |
 
 Settings are saved to `settings.json`, which is git-ignored, and every open window shares them.
 
@@ -122,6 +122,8 @@ Each test runs headless Chrome against the running server. It does its work in a
 ```
 
 ## Limitations and ideas
+
+- herdr sizes every pane to its own TUI window, and panes keep the size of the last herdr window that was open. If that window was small (for example, one reopened at login after a reboot), the mirror can only show that many columns: AUTO text stops at 16 px and the mirror says the pane's size. Open `herdr` once in a full-size terminal window to resize the panes; they keep that size after you close it.
 
 - Push-to-talk only works while the LCARS window has focus. A global hotkey needs a small native helper.
 - The mirror shows only the visible rows (no scrollback of its own) and polls for changes. Both would improve if herdr added an output stream and cursor reporting.

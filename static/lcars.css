@@ -171,4 +171,6 @@ main.has-selection .p-lines { height: calc(2 * 1.45em); }
 .set-ctl input[type=range] { flex: 1; accent-color: var(--gold); min-width: 120px; }
 #set-mute.on { background: var(--red); color: #000; } #set-mute:not(.on) { background: #3a2f2a; color: var(--tan); }
 .term-wrap.fixed-font { overflow-x: auto; }
+.term-note { position: absolute; top: 10px; right: 14px; max-width: 46%; text-align: right; font-size: 15px; letter-spacing: .04em; color: var(--dim); pointer-events: none; }
+.term-note[hidden] { display: none; }
 .term-wrap.fixed-font::-webkit-scrollbar { height: 8px; } .term-wrap.fixed-font::-webkit-scrollbar-thumb { background: #3a2f2a; border-radius: 4px; }

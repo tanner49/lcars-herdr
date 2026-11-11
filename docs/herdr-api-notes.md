@@ -22,6 +22,7 @@ Tested against herdr 0.9.3 (protocol 22) on macOS. The installed binary is the a
   - **columns:** the widest rendered line, or the rect's width when its height agrees with `viewport_rows`.
 
   Sizing a mirror too narrow wraps lines and shifts every row, so mouse reports land rows off.
+- **Who sets the size:** panes follow the attached herdr TUI client's window (the server log shows `client connected … cols= rows=`), and keep the last client's size after it detaches. After a server restart, restored panes spawn at the first client's size, or 80×24 with none attached. New tabs spawn at the saved layout size (120×40 here). One 54×23 client that ran for 10 s at login left every restored pane at 53×23. The API has no call to set a pane's terminal size (`pane.resize` moves split borders).
 - **Pane scrollback:** `pane.get` includes `scroll: {offset_from_bottom, max_offset_from_bottom, viewport_rows}`. Agents that run full-screen (in the terminal's alternate screen), such as Claude Code, report `max_offset_from_bottom: 0`, meaning herdr keeps no scrollback for them.
 
 ## Reading output

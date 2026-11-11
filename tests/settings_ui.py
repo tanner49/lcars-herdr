@@ -8,6 +8,7 @@ agent alerts on synthetic status changes, and a custom sound file in sounds/ rep
 
 import asyncio
 import io
+import json
 import math
 import os
 import struct
@@ -34,6 +35,16 @@ def tone_wav() -> bytes:
     return buf.getvalue()
 
 
+def restore_live(text):
+    import re
+    import urllib.request
+    base = "http://127.0.0.1:7477"
+    token = re.search(r'LCARS_TOKEN = "([^"]+)"', urllib.request.urlopen(base + "/").read().decode())[1]
+    body = text if text is not None else json.dumps(server.SETTINGS_DEFAULTS)
+    urllib.request.urlopen(urllib.request.Request(base + "/api/settings", data=body.encode(), method="POST", headers={
+        "X-LCARS-Token": token, "Content-Type": "application/json", "Origin": base})).read()
+
+
 async def main():
     saved = SETTINGS.read_text() if SETTINGS.exists() else None
     tab, pane = await scratch.open("lcars-settings-ui")
@@ -51,13 +62,17 @@ async def main():
             check("settings opens", not await page.eval("document.getElementById('settings').hidden"))
             await click("#set-font-auto"); await page.idle(0.8)  # start from AUTO (your saved minimum is restored after)
             auto = await page.eval(FS)
+            fill = await page.eval("window.__lcars.state.fitFont")
+            check("AUTO: fills the width, at most 16", auto == min(16, fill) or abs(auto - fill) < 0.1, f"(auto {auto}, fill {fill})")
             await click("#set-font-up"); await page.idle(0.8)
             bigger = await page.eval(FS)
             sideways = await page.eval("(() => { const w = document.getElementById('term-wrap'); return w.scrollWidth > w.clientWidth; })()")
-            check("text + : visibly bigger than the fill size, scrolls sideways", bigger == math.ceil(auto) + 1 and sideways, f"({auto} -> {bigger})")
+            check("text + : one point bigger (scrolls sideways if wider than the space)",
+                  bigger == math.floor(auto) + 1 and sideways == (bigger > fill + 0.1), f"({auto} -> {bigger}, sideways {sideways})")
             await click("#set-font-dn"); await click("#set-font-dn"); await page.idle(0.8)
-            back = await page.eval(FS)
-            check("text - back to the fill size (never dead space)", back == auto and SETTINGS.read_text().count('"auto"') == 1, f"(-> {back})")
+            smaller = await page.eval(FS)
+            got = json.loads(SETTINGS.read_text())["font_size"]
+            check("text - : goes below the fill size too (a fixed size)", smaller == math.floor(auto) - 1 == got, f"(-> {smaller}, saved {got})")
             await click("#set-font-auto"); await page.idle(0.6)
             check("AUTO restores the fit", await page.eval(FS) == auto)
             await click("[data-set=board_beside] [data-val=false]"); await page.idle(0.8)
@@ -108,6 +123,7 @@ async def main():
             check("sounds/done.wav picked up", "/sounds/done.wav" in custom.get("done", []) and "done" in hint, f"({hint})")
     finally:
         CUSTOM.unlink(missing_ok=True)
+        restore_live(saved)  # through the API, so open LCARS windows get the original settings back too
         if saved is None:
             SETTINGS.unlink(missing_ok=True)
         else:

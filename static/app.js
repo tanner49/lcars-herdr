@@ -8,6 +8,7 @@
   const FORCE_MOUSE = /[#?&]mouse=1/.test(location.hash); // tests: treat a scratch shell like an agent pane
   const SHOW_TESTS = /[#?&]tests=1/.test(location.hash);   // tests: show the "lcars-tests" scratch workspaces
   const TEST_WS = "lcars-tests";
+  const AUTO_MAX = 16; // AUTO text size cap (px): a small herdr pane leaves space rather than giant text
   const visible = (b) => SHOW_TESTS ? b : { ...b, tabs: b.tabs.filter((t) => t.workspace_label !== TEST_WS),
                                                    workspaces: b.workspaces.filter((w) => w.label !== TEST_WS) };
 
@@ -212,19 +213,21 @@
     if (fit.queued) { fit.queued = false; requestFit(); }
   }
   function fitTerm(depth = 0, st = null, key = null) {
-    // Fill the space. 1) Font size fits herdr's columns to the width (never below the SETTINGS minimum; a pane
-    // too wide for that scrolls sideways). 2) Line spacing: binary search in [1, 1.5] for the tallest rows that fit
-    // (row heights snap to device pixels, so proportional estimates oscillate; cropping < half a row is allowed).
-    // The view is bottom-anchored (latest output, agent input box). Never a CSS scale: xterm maps the mouse itself.
+    // Fill the space. 1) Font size: AUTO fits herdr's columns to the width, up to AUTO_MAX (herdr sizes the panes
+    // to its own window, and with no herdr window open they can be tiny, e.g. 53x23 after a reboot); a SETTINGS
+    // size is used as is (a pane too wide for it scrolls sideways). 2) Line spacing: binary search in [1, 1.5] for
+    // the tallest rows that fit (row heights snap to device pixels, so proportional estimates oscillate; cropping
+    // < half a row is allowed). The view is bottom-anchored (latest output, agent input box). Never a CSS scale:
+    // xterm maps the mouse itself.
     if (!term) return;
     const el = $("term"), wrap = $("term-wrap"), screen = el.querySelector(".xterm-screen");
     const availW = wrap.clientWidth - 14, availH = wrap.clientHeight - 12;
-    const minFs = state.settings.font_size === "auto" ? 6 : state.settings.font_size;
+    const fixed = state.settings.font_size === "auto" ? null : state.settings.font_size;
     if (depth === 0) {
-      key = `${availW}x${availH}:${term.cols}x${term.rows}:${minFs}`;
+      key = `${availW}x${availH}:${term.cols}x${term.rows}:${fixed || "auto"}`;
       if (key === fit.key || fit.running) return;
       fit.running = true; fit.started = performance.now();
-      st = { phase: "font", fsCap: 24, lo: 1, hi: 1.5, fitFs: null };
+      st = { phase: "font", fsCap: AUTO_MAX, lo: 1, hi: 1.5, fitFs: null };
     }
     if (depth > 40) return fitDone(key);
     const fs = term.options.fontSize, lh = term.options.lineHeight;
@@ -234,9 +237,9 @@
     if (st.phase === "font") {
       if (lh !== 1) { term.options.lineHeight = 1; return again(); } // measure widths at plain spacing
       const fitFs = Math.floor((fs * availW / w) * 20) / 20; // 0.05 px steps: fills to within a few px
-      const wantFs = Math.min(st.fsCap, Math.max(minFs, fitFs));
+      const wantFs = fixed || Math.max(6, Math.min(st.fsCap, fitFs));
       if (Math.abs(wantFs - fs) >= 0.05) { term.options.fontSize = wantFs; return again(); }
-      if (w > availW + 0.5 && fs - 0.05 >= minFs) { st.fsCap = +(fs - 0.05).toFixed(2); term.options.fontSize = st.fsCap; return again(); }
+      if (!fixed && w > availW + 0.5 && fs - 0.05 >= 6) { st.fsCap = +(fs - 0.05).toFixed(2); term.options.fontSize = st.fsCap; return again(); }
       st.fitFs = fitFs; st.phase = "lh";
     }
     if (st.phase === "lh") {
@@ -252,9 +255,12 @@
         st.phase = "done";
       }
     }
-    wrap.classList.toggle("fixed-font", w > availW + 1); // sideways scroll only when the minimum forces it
+    wrap.classList.toggle("fixed-font", w > availW + 1); // sideways scroll only when a set size forces it
     state.autoFont = fs;
-    state.fitFont = Math.max(6, st.fitFs || fs); // the size that exactly fills the width (before any minimum)
+    state.fitFont = Math.max(6, st.fitFs || fs); // the size that exactly fills the width
+    const note = $("term-note"); // say why there's space left over: the pane itself is small
+    note.hidden = !(state.fitFont > AUTO_MAX + 0.5 && w < availW - 40);
+    if (!note.hidden) note.textContent = `HERDR PANE IS ${term.cols}×${term.rows} · OPEN HERDR IN A LARGER WINDOW TO RESIZE IT`;
     el.style.marginTop = `${Math.round(availH - h)}px`; // bottom-anchored: shorter -> gap above; taller -> top cropped
     renderFontSetting();
     fitDone(key);
@@ -642,11 +648,11 @@
   function renderFontSetting() {
     const fs = state.settings.font_size;
     const now = state.autoFont ? ` · ${(+state.autoFont).toFixed(1)}` : "";
-    $("set-font-val").textContent = fs === "auto" ? `AUTO${now}` : `MIN ${fs}${now}`;
+    $("set-font-val").textContent = fs === "auto" ? `AUTO${now}` : `${fs}`;
     $("set-font-auto").classList.toggle("seg-btn", fs !== "auto");
     $("set-font-hint").textContent = fs === "auto"
-      ? "Text always fills the terminal space. − / + sets a minimum size."
-      : `Fills the space but never below ${fs}; a pane too wide for that scrolls sideways.`;
+      ? `Fits the pane's width, up to ${AUTO_MAX}. − / + set a fixed size.`
+      : `Fixed at ${fs}. AUTO fits the width again; a pane too wide for ${fs} scrolls sideways.`;
   }
   function applySettings() {
     const st = state.settings;
@@ -681,12 +687,10 @@
     const v = b.dataset.val === "true" ? true : b.dataset.val === "false" ? false : b.dataset.val;
     saveSettings({ [g.dataset.set]: v });
   }));
-  const stepFont = (d) => { // steps the size you see: + one point bigger; - one smaller, or AUTO if that would leave dead space
-    const fill = state.fitFont || state.autoFont || 12, min = state.settings.font_size;
-    const shown = min === "auto" ? fill : Math.max(fill, min); // from settings, so rapid clicks don't use a stale size
-    const next = d > 0 ? Math.min(24, Math.ceil(shown) + 1) : Math.floor(shown) - 1;
-    if (d < 0 && (next < 7 || next <= (state.fitFont || 0))) return saveSettings({ font_size: "auto" });
-    saveSettings({ font_size: next });
+  const stepFont = (d) => { // steps the size you see by one point, to a fixed size (7-24); AUTO goes back to fitting
+    const fs = state.settings.font_size; // from settings, so rapid clicks don't use a stale size
+    const shown = fs === "auto" ? (state.autoFont || 12) : fs;
+    saveSettings({ font_size: d > 0 ? Math.min(24, Math.floor(shown) + 1) : Math.max(7, Math.ceil(shown) - 1) });
   };
   $("set-font-up").addEventListener("click", () => stepFont(1));
   $("set-font-dn").addEventListener("click", () => stepFont(-1));
