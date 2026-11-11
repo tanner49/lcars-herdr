@@ -509,6 +509,8 @@ async def index(request: web.Request):
     html = ((STATIC / "index.html").read_text().replace("__LCARS_TOKEN__", TOKEN)
             .replace("__LCARS_SETTINGS__", json.dumps(load_settings()))
             .replace("__LCARS_SOUNDS__", json.dumps(custom_sounds())))
+    for name in ("app.js", "lcars.css"):  # version the URLs, so an updated file is never served from Chrome's cache
+        html = html.replace(f'/static/{name}"', f'/static/{name}?v={int((STATIC / name).stat().st_mtime)}"')
     return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
 
