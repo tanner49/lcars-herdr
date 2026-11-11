@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LCARS</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/lcars-192.png">
+<meta name="theme-color" content="#000000">
+<link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+<link rel="stylesheet" href="/static/lcars.css">
+<script>
+  window.LCARS_TOKEN = "__LCARS_TOKEN__";
+  window.LCARS_SETTINGS = __LCARS_SETTINGS__;
+  window.LCARS_SOUNDS = __LCARS_SOUNDS__;
+</script>
+</head>
+<body>
+<div class="frame">
+  <!-- top elbow + bar -->
+  <div class="elbow elbow-tl c-orange"><span class="elbow-code" id="code-top">HRD-0947</span></div>
+  <div class="top">
+    <div class="bar bar-top">
+      <span class="seg c-orange grow"></span>
+      <span class="seg c-lavender w80"></span>
+      <span class="seg c-peach w40"></span>
+      <span class="seg c-ice w120"></span>
+    </div>
+    <header class="title-row">
+      <div class="readouts" id="readouts">
+        <span><b id="ro-working">0</b> WORKING</span>
+        <span><b id="ro-blocked">0</b> BLOCKED</span>
+        <span><b id="ro-done">0</b> DONE</span>
+        <span><b id="ro-idle">0</b> IDLE</span>
+      </div>
+      <h1>HERDR OPERATIONS</h1>
+      <div class="clock" id="clock">--:--:--</div>
+    </header>
+  </div>
+
+  <!-- sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <button class="block c-peach" data-filter="all"><span>ALL</span><i>01</i></button>
+    <div id="ws-filters"></div>
+    <button class="block c-lavender" id="btn-focus" disabled><span>VIEW IN HERDR</span><i>05</i></button>
+    <button class="block c-red" id="btn-close" disabled><span>CLOSE TAB</span><i>06</i></button>
+    <button class="block c-gold talk" id="btn-talk"><span>TALK</span><i>HOLD</i></button>
+    <button class="block c-tan" id="btn-settings"><span>SETTINGS</span><i>07</i></button>
+    <button class="block c-ice" id="btn-install" hidden title="Install LCARS as its own app (Dock, Cmd-Tab)"><span>INSTALL APP</span><i>08</i></button>
+    <div class="block filler c-orange"><i id="code-mid">47-0091</i></div>
+  </nav>
+
+  <!-- main viewport -->
+  <main id="main" class="no-selection">
+    <section id="board" class="board"></section>
+    <section id="detail" class="detail" hidden>
+      <div class="detail-head">
+        <span class="cap c-orange"></span>
+        <span class="detail-title" id="detail-title">—</span>
+        <span class="light" id="detail-light"></span>
+        <span class="detail-meta" id="detail-meta"></span>
+        <button class="pill c-lavender" id="btn-unselect">BOARD</button>
+        <span class="cap-r c-orange"></span>
+      </div>
+      <div class="term-wrap" id="term-wrap"><div id="term"></div></div>
+    </section>
+  </main>
+
+  <!-- bottom elbow + bar -->
+  <div class="elbow elbow-bl c-lavender"><span class="elbow-code">VOX</span></div>
+  <div class="bottom">
+    <footer class="voice-row">
+      <span class="vox-light" id="vox-light"></span>
+      <span class="vox-state" id="vox-state">VOICE: STANDBY</span>
+      <span class="vox-text" id="vox-text">Hold RIGHT OPTION (or the TALK block) and speak. Text lands in the selected pane without Enter.</span>
+      <span class="vox-target" id="vox-target">NO TARGET</span>
+    </footer>
+    <div class="bar bar-bottom">
+      <span class="seg c-lavender w120"></span>
+      <span class="seg c-gold grow"></span>
+      <span class="seg c-orange w80"></span>
+      <span class="seg c-ice w40"></span>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-box" id="modal-box">
+    <div class="modal-bar" id="modal-bar"><span id="modal-title">CONFIRM</span></div>
+    <p id="modal-text"></p>
+    <input id="modal-input" type="text" maxlength="40" autocomplete="off" spellcheck="false" hidden>
+    <div class="modal-actions">
+      <button class="pill" id="modal-yes">CONFIRM</button>
+      <button class="pill c-ice" id="modal-no">CANCEL</button>
+    </div>
+  </div>
+</div>
+<div id="settings" class="modal" hidden>
+  <div class="modal-box settings-box c-tan">
+    <div class="modal-bar"><span>SETTINGS</span></div>
+    <div class="set-grid">
+      <span class="set-label">TERMINAL TEXT</span>
+      <div class="set-ctl">
+        <button class="pill c-peach" id="set-font-dn" title="Smaller">−</button>
+        <span class="set-value" id="set-font-val">AUTO</span>
+        <button class="pill c-peach" id="set-font-up" title="Larger">+</button>
+        <button class="pill c-ice" id="set-font-auto" title="Fit the pane's width">AUTO</button>
+      </div>
+      <span class="set-hint" id="set-font-hint"></span>
+
+      <span class="set-label">BOARD LIST</span>
+      <div class="set-ctl" data-set="board_beside">
+        <button class="pill seg-btn" data-val="true">BESIDE TERMINAL</button>
+        <button class="pill seg-btn" data-val="false">HIDE WHILE VIEWING</button>
+      </div>
+      <span class="set-hint">Hiding it gives the terminal the full width, so AUTO text gets bigger.</span>
+
+      <span class="set-label">TALK KEY</span>
+      <div class="set-ctl" data-set="ptt_key">
+        <button class="pill seg-btn" data-val="AltRight">RIGHT OPTION</button>
+        <button class="pill seg-btn" data-val="MetaRight">RIGHT COMMAND</button>
+      </div>
+      <span class="set-hint">Hold to dictate into the selected pane.</span>
+
+      <span class="set-label">SOUND</span>
+      <div class="set-ctl">
+        <button class="pill c-red" id="set-mute">MUTE</button>
+        <input type="range" id="set-volume" min="0" max="100" step="5">
+        <span class="set-value" id="set-volume-val">60</span>
+        <button class="pill c-ice" id="set-test">TEST</button>
+      </div>
+      <span class="set-hint" id="set-sound-hint"></span>
+
+      <span class="set-label">AGENT ALERTS</span>
+      <div class="set-ctl" data-set="alert_sounds">
+        <button class="pill seg-btn" data-val="true">ON</button>
+        <button class="pill seg-btn" data-val="false">OFF</button>
+      </div>
+      <span class="set-hint">A chirp when an agent finishes, an attention beep when one is blocked.</span>
+
+      <span class="set-label">BUTTON CLICKS</span>
+      <div class="set-ctl" data-set="click_sounds">
+        <button class="pill seg-btn" data-val="true">ON</button>
+        <button class="pill seg-btn" data-val="false">OFF</button>
+      </div>
+      <span class="set-hint">Panel beeps on buttons, panels and the sidebar.</span>
+    </div>
+    <div class="modal-actions"><button class="pill c-tan" id="set-done">DONE</button></div>
+  </div>
+</div>
+<div id="toasts" class="toasts"></div>
+
+<script src="/vendor/xterm/lib/xterm.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

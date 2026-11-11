@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Original LCARS-style app icon: elbow frame + pills. No Star Trek artwork. -->
+  <rect x="16" y="16" width="480" height="480" rx="110" fill="#000"/>
+  <!-- top elbow (orange) with concave inner corner -->
+  <path d="M84 232 V170 A76 76 0 0 1 160 94 H318 V146 H226 A30 30 0 0 0 196 176 V232 Z" fill="#ff9c00"/>
+  <rect x="330" y="94" width="40" height="52" fill="#cc99cc"/>
+  <path d="M382 94 H404 A26 26 0 0 1 404 146 H382 Z" fill="#99ccff"/>
+  <!-- sidebar blocks -->
+  <rect x="84" y="244" width="112" height="44" fill="#cc99cc"/>
+  <rect x="84" y="300" width="112" height="30" fill="#99ccff"/>
+  <!-- bottom elbow (lavender) -->
+  <path d="M84 342 H196 V350 A30 30 0 0 0 226 380 H318 V418 H160 A76 76 0 0 1 84 342 Z" fill="#cc99cc"/>
+  <rect x="330" y="380" width="40" height="38" fill="#ffcc66"/>
+  <path d="M382 380 H404 A19 19 0 0 1 404 418 H382 Z" fill="#ff9c00"/>
+  <!-- readout pills -->
+  <rect x="228" y="190" width="200" height="24" rx="12" fill="#ffcc66"/>
+  <rect x="228" y="232" width="146" height="24" rx="12" fill="#ff9f80"/>
+  <rect x="228" y="274" width="176" height="24" rx="12" fill="#99ccff"/>
+  <rect x="228" y="316" width="118" height="24" rx="12" fill="#cc99cc"/>
+</svg>

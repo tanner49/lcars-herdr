@@ -1,0 +1,20 @@
+{
+  "name": "lcars-herdr",
+  "version": "1.0.0",
+  "description": "LCARS-style console for herdr agents, with local push-to-talk voice to text",
+  "private": true,
+  "license": "MIT",
+  "author": "tanner49",
+  "keywords": [
+    "herdr",
+    "lcars",
+    "terminal",
+    "agents",
+    "whisper"
+  ],
+  "type": "commonjs",
+  "dependencies": {
+    "@fontsource/antonio": "^5.3.0",
+    "@xterm/xterm": "^6.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+.venv/
+node_modules/
+models/*.bin
+.chrome-app/
+__pycache__/
+*.log
+logs/
+settings.json
+sounds/*
+!sounds/README.md

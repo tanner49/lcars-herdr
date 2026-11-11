@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# lcars — start, stop and open the LCARS herdr console.
+#
+#   lcars up        start the server in the background if needed, then open the app window
+#   lcars down      stop the server
+#   lcars restart   down + up
+#   lcars status    running? port, PID, uptime, log
+#   lcars open      open the app window (server must be running)
+#   lcars install   one-time: install LCARS as its own app (Dock, Cmd-Tab), then `up`/`open` use it
+#   lcars logs      follow the server log
+#
+# Works from any directory, inside or outside herdr. The server binds 127.0.0.1 only.
+# LCARS_PORT overrides the port (default 7477).
+set -euo pipefail
+
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+PORT=${LCARS_PORT:-7477}
+URL="http://127.0.0.1:$PORT/"
+LOG_DIR="$ROOT/logs"
+LOG="$LOG_DIR/server.log"
+PIDFILE="$LOG_DIR/server.pid"
+
+say() { printf 'lcars: %s\n' "$*"; }
+
+# PID of the process listening on our port, only if it is this project's server.py.
+server_pid() {
+  local pid cwd
+  for pid in $(lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null); do
+    cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    if [[ $cwd == "$ROOT" ]] && ps -o command= -p "$pid" | grep -q 'server\.py'; then
+      echo "$pid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+port_owner() { lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -1; }
+
+healthy() { curl -fs -o /dev/null --max-time 1 "$URL"; }
+
+setup() {
+  [[ -x $ROOT/.venv/bin/python ]] || { say "creating .venv"; python3 -m venv "$ROOT/.venv"; "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt"; }
+  [[ -d $ROOT/node_modules/@xterm ]] || { say "npm install"; (cd "$ROOT" && npm install --silent); }
+  [[ -f $ROOT/models/ggml-base.en.bin ]] || {
+    say "fetching whisper base.en model (141 MB) into models/"
+    mkdir -p "$ROOT/models"
+    curl -fL -o "$ROOT/models/ggml-base.en.bin" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+  }
+}
+
+# The installed app (Chrome creates it in ~/Applications/Chrome Apps when you click Install), if any.
+installed_app() {
+  local app url
+  for app in "$HOME/Applications/Chrome Apps.localized"/*.app "$HOME/Applications/Chrome Apps"/*.app; do
+    [[ -f $app/Contents/Info.plist ]] || continue
+    url=$(/usr/libexec/PlistBuddy -c 'Print :CrAppModeShortcutURL' "$app/Contents/Info.plist" 2>/dev/null) || continue
+    [[ $url == "$URL"* || $url == "http://localhost:$PORT/"* ]] && { echo "$app"; return 0; }
+  done
+  return 1
+}
+
+open_window() {
+  local app
+  if app=$(installed_app); then
+    open "$app" # its own app: Dock icon, Cmd-Tab
+  else
+    # Chromeless app window on a project-local Chrome profile (its own mic permission). Shows in the Dock as
+    # Chrome until installed (`lcars install`).
+    open -na "Google Chrome" --args --app="$URL" --user-data-dir="$ROOT/.chrome-app" \
+      --no-first-run --no-default-browser-check --window-size=1600,1000 --autoplay-policy=no-user-gesture-required
+  fi
+}
+
+cmd_install() {
+  local app
+  if app=$(installed_app); then say "already installed: $app"; open "$app"; return 0; fi
+  server_pid >/dev/null || cmd_up --no-open
+  # A normal window on the same profile, so Chrome's install offer is available (sidebar INSTALL APP button,
+  # or the install icon at the right of the address bar).
+  open -na "Google Chrome" --args --user-data-dir="$ROOT/.chrome-app" --no-first-run --no-default-browser-check --new-window "$URL"
+  say "in the window that opened: click INSTALL APP in the LCARS sidebar (or the install icon in the address bar), then Install."
+  say "LCARS then shows up as its own app in the Dock and Cmd-Tab; 'lcars up' / 'lcars open' open it from then on."
+}
+
+cmd_up() {
+  local pid
+  if pid=$(server_pid); then
+    say "already running (pid $pid, $URL)"
+  else
+    if [[ -n $(port_owner) ]]; then
+      say "port $PORT is in use by another process (pid $(port_owner)); set LCARS_PORT to use a different one" >&2
+      exit 1
+    fi
+    setup
+    mkdir -p "$LOG_DIR"
+    printf '\n==== lcars up %s ====\n' "$(date '+%F %T')" >>"$LOG"
+    # nohup'd background job that survives closing the terminal / herdr pane. Redirect the whole subshell
+    # and exec into python, so nothing keeps the caller's stdout open (`lcars up | …` must return).
+    (cd "$ROOT" || exit 1; LCARS_PORT="$PORT" exec nohup "$ROOT/.venv/bin/python" server.py) >>"$LOG" 2>&1 </dev/null &
+    disown 2>/dev/null || true
+    for _ in $(seq 100); do
+      healthy && break
+      sleep 0.1
+    done
+    if ! pid=$(server_pid) || ! healthy; then
+      say "server failed to start; last log lines:" >&2
+      tail -20 "$LOG" >&2
+      [[ -n ${pid:-} ]] && kill -TERM "$pid" 2>/dev/null  # don't leave a half-started server holding the port
+      exit 1
+    fi
+    echo "$pid" >"$PIDFILE"
+    say "started (pid $pid, $URL, log $LOG)"
+  fi
+  [[ ${1:-} == --no-open ]] || open_window
+}
+
+cmd_down() {
+  local pid
+  if ! pid=$(server_pid); then
+    say "not running"
+    rm -f "$PIDFILE"
+    return 0
+  fi
+  kill -TERM "$pid"
+  for _ in $(seq 50); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    say "pid $pid didn't exit after 5 s; sending SIGKILL"
+    kill -KILL "$pid"
+  fi
+  rm -f "$PIDFILE"
+  say "stopped (pid $pid)"
+}
+
+cmd_status() {
+  local pid
+  if pid=$(server_pid); then
+    local health=down
+    healthy && health=ok
+    say "running: pid $pid, port $PORT (127.0.0.1 only), up $(ps -o etime= -p "$pid" | tr -d ' '), http $health"
+    say "url $URL  log $LOG"
+  else
+    say "not running (port $PORT)"
+    [[ -n $(port_owner) ]] && say "note: port $PORT is held by another process (pid $(port_owner))"
+    return 3
+  fi
+}
+
+cmd_open() {
+  if server_pid >/dev/null; then open_window; else say "not running; use: lcars up" >&2; exit 1; fi
+}
+
+case ${1:-} in
+  up) shift; cmd_up "$@" ;;
+  down | stop) cmd_down ;;
+  restart) cmd_down; cmd_up "${2:-}" ;;
+  status) cmd_status ;;
+  open) cmd_open ;;
+  install) cmd_install ;;
+  logs) mkdir -p "$LOG_DIR"; touch "$LOG"; exec tail -n 50 -f "$LOG" ;;
+  -h | --help | help | "") sed -n '2,13p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) say "unknown command: $1 (try: lcars help)" >&2; exit 2 ;;
+esac
