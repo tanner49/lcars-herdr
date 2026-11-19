@@ -147,16 +147,6 @@ Since 2026-11-10, Tanner sets aside time at the start of each day to clear his b
 4. **Clean up only what you created.** Once Tanner says go, stop the watchdog (`TaskStop`), then `herdr tab close <tab_id>` for each tab in today's file. Never close tabs, panes or workspaces you didn't create. Background sessions you started with `claude --bg` are removed with `claude rm <id>`.
 5. Give Tanner a 5-line wrap-up: done, open, waiting on him, tomorrow's first move.
 
-## Leadership docs (FYI, since 2026-11-18)
-
-Tanner effectively leads AI & DS for Sales & Care (with Won Woo Seo; Mike is leaving), and Nikhil wants him to lead it. He keeps two docs updated. COS doesn't edit them unless Tanner asks for a small edit, and never shares them or changes their permissions. COS's job is to keep Jira tickets and the day files aligned with what they say: flag work that's missing from the docs, and doc items with no ticket or no progress.
-- **H2 running doc for leadership:** https://docs.google.com/document/d/1bhGshmow2Vc7BKuF75_rgUQWvW3cGmpquN293krrvV8/edit
-- **Monthly sales-leadership alignment doc** (what we're working on, so everyone's aligned): https://docs.google.com/document/d/1wjHiMQsLwCD9f2Nelt1bMQcLWmBl3vaIBmAP2LbcOGE/edit
-- **Their layout** (read 11/18):
-  - The H2 doc has tabs for Large Pros GTM (Tanner's), SMB+ GTM, Care and References. Each tab holds stakeholders, an H2 plan table, then dated Completed / In Progress / Next blocks, added about monthly.
-  - The monthly doc has one tab per meeting, newest first, held mid-month. Each tab covers the 5 workstreams with Completed / Current Focus / Coming Next / Challenges and an owner on every line.
-  - Only AIML-599 is cited. Mapping lines to tickets is COS's job.
-
 ## Known gaps (as of 2026-11-04)
 
 - **CoS instructions typed in an agent's tab.** On 2026-11-04 Tanner meant to ask me to run end of day but typed it in `rob-v2-batches`' tab. That agent loaded this skill and did the whole closeout. The brief template now tells agents to forward such instructions to you instead. Agents started from older briefs won't know that, so if one reports doing CoS work, check the result (`herdr tab list`, `claude agents --json`, the day file).
@@ -166,6 +156,3 @@ Tanner effectively leads AI & DS for Sales & Care (with Won Woo Seo; Mike is lea
 - **Idle notices are off by default (2026-11-16).** Over 11/04 to 11/16, 80 subscriptions produced 77 notices, and 59 of them arrived about 30s after the same agent's report and added nothing. Each one started a COS turn and a "nothing new" reply for Tanner. They also fire when an agent goes idle while its work continues (a background job, a timer, CI), when a brief hasn't been submitted yet, or when Tanner is typing in the agent's tab. A notice can't see a blocked agent, because that agent is mid-turn. The watchdog replaces them (section 4). Details are in `~/.claude/chief-of-staff/drafts/idle-noise-fix.md`. Claude Code has no setting to filter, delay or silence a notice; `crossSessionInbound: hold` would also hold the agents' reports.
 - **Agents waiting on their own background shell** show "N shell still running" in the pane footer and go idle. The watchdog doesn't count idle time while that footer shows (a false `no-report` on zi-cleaned, 2026-11-16). A job that hangs inside such a shell is still not detected.
 - **Auto-mode blocks:** on 2026-11-05 tickets-1105 showed "1 action not run · auto mode's check had no usable answer" and carried on with its task. It didn't stop or ask. The cause was the RTK hook rewriting `cat` to `rtk read`, which left auto mode with nothing to judge. The agent re-ran the command and nothing was missed. When you check an agent's report, ask what it skipped.
-- **Jira transitions are blocked in agents.** On 2026-11-05 auto mode let `createJiraIssue` through but denied `transitionJiraIssue` ("External System Writes"), even though Tanner had OK'd closing that ticket. Don't retry an agent's denied action yourself (that's permission laundering). But when Tanner asks you directly to change ticket status, do it here: it worked from this session on 2026-11-05. Use the claude.ai Atlassian connector: `listJiraIssueTransitions` through executeRead, then `transitionJiraIssue`. In AIML, In Progress is 21, Done is 31 and Won't do is 3. Pick the transition by its target status category. DAS's "Obsolete" is in the To Do category, so it doesn't close a ticket; use Won't do (3).
-- **Snowflake login tabs:** there's no keyring, so each Snowflake connection opens an Okta tab, and parallel Snowflake agents mean several tabs. Fix: install `snowflake-connector-python[secure-local-storage]`.
-- **Off VPN:** Snowflake rejects connections ("IP … not allowed"). Ask Tanner to connect.
